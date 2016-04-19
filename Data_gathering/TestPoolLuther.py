@@ -38,6 +38,7 @@ def main():
             movie_page.append(link)
     #Retrieve all necessary info from each page link and save it as a list of dictionaries.
     amd = getAllMovieData(movie_page, pool)
+    print(amd)
     #save dictionary in a pickle
     with open('MovieDict.pickle', 'wb') as handle:
         pickle.dump(amd, handle)
@@ -85,7 +86,7 @@ def generate_links(soup):
 def getAllMovieData(movie_pages, pool):
     data = []
     count = 0
-    for i in movie_pages:
+    for i in movie_pages[:10]:
         movie_data = getSingleMovieData(i, pool)
         data.append(movie_data)
         count += 1
@@ -100,7 +101,7 @@ def get_actor_list(soup, pool):
     #actornames = []
     actorElapsedTimes = []
     actordict = {}
-    obj = soup.find(text=re.compile('Actor:'))
+    obj = soup.find(text=re.compile('Actor'))
     if not obj: 
         return None
     else:
@@ -121,7 +122,7 @@ def get_director_list(soup, pool):
     #directornames = []
     directorElapsedTimes = []
     directordict = {}
-    obj = soup.find(text=re.compile('Director:'))
+    obj = soup.find(text=re.compile('Director'))
     if not obj: 
         return None
     else:
