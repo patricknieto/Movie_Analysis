@@ -27,17 +27,17 @@ def main():
 
     #http = urllib3.PoolManager( cert_reqs='CERT_REQUIRED', ca_certs=certifi.where())
 
-    pool = urllib3.connection_from_url('http://www.boxofficemojo.com')
+    #pool = urllib3.connection_from_url('http://www.boxofficemojo.com')
     #create a list of page links to the yearly charts. Number of charts set in get_pages()
     movie_page = []
     for url in get_pages():
         #get soup result from every chart in order to find all of the movie links
-        soup_result = get_soup(url, pool)
+        soup_result = get_soup(url)
         #loop through every link on chart pages and add them too a larger list of all movie links
         for link in generate_links(soup_result):
             movie_page.append(link)
     #Retrieve all necessary info from each page link and save it as a list of dictionaries.
-    amd = getAllMovieData(movie_page, pool)
+    amd = getAllMovieData(movie_page)
     #save dictionary in a pickle
     with open('MovieDict.pickle', 'wb') as handle:
         pickle.dump(amd, handle)
@@ -60,10 +60,11 @@ def get_pages ():
     return url_list
 
 
-def get_soup(url, pool):
+def get_soup(url):
     try:
-        r = pool.request('GET', url, preload_content=False)
-        soup = BeautifulSoup(r.data, 'lxml')
+        r = requests.get( url)
+        page = r.text
+        soup = BeautifulSoup(page, 'lxml')
 
     except requests.ConnectionError:
         print("failed to connect")
@@ -82,30 +83,32 @@ def generate_links(soup):
     return(link_list)
 
 
-def getAllMovieData(movie_pages, pool):
+def getAllMovieData(movie_pages):
     data = []
     count = 0
-    for i in movie_pages:
-        movie_data = getSingleMovieData(i, pool)
+    for i in movie_pages[:500]:
+        movie_data = getSingleMovieData(i)
         data.append(movie_data)
         count += 1
         print('Movies:' + str(count))
-        print('Requests' + str(pool.num_requests))
+        #print('Requests' + str(pool.num_requests))
     return data    
 
 
 # In[140]:
 
-def get_actor_list(soup, pool):
+def get_actor_list(soup):
     #actornames = []
     actorElapsedTimes = []
     actordict = {}
-    obj = soup.find(text=re.compile('Actor:'))
+    obj = soup.find(text=re.compile('Actor'))
     if not obj: 
         return None
     else:
         for link in obj.findNext('td').find_all('a'):
-            actordict[link.text] = get_date_diff(link['href'], pool)
+            name = link.text.replace('*','')
+            actordict[name] = get_date_diff(link['href']), get_gender(name), get_bday(name)
+            print(name)
             #actornames.append(get_date_diff(link['href']))
     
 #     obj = soup.find(text=re.compile('Actor'))
@@ -117,7 +120,7 @@ def get_actor_list(soup, pool):
 
 
 
-def get_director_list(soup, pool):
+def get_director_list(soup):
     #directornames = []
     directorElapsedTimes = []
     directordict = {}
@@ -126,25 +129,27 @@ def get_director_list(soup, pool):
         return None
     else:
         for link in obj.findNext('td').find_all('a'):
-            directordict[link.text] = [get_date_diff(link['href'], pool)]
+            name = link.text.replace('*', '')
+            directordict[name] = get_date_diff(link['href']), get_gender(name), get_bday(name)
+            print(name)
             #directornames.append(get_director_date_diff(link['href']))
+    return directordict
 
-    directordict
+    #directordict
 #     obj = soup.find(text=re.compile('Actor'))
 #     for link in obj.findNext('td').find_all('a'):
 #         actorElapsedTimes.append(link['href'])  
     #directordict = dict(directornames[i:i+2] for i in range(0, len(directornames), 2))
     #print(directordict)
-    return(directordict)
 
 
 
 
-def get_date_diff(href, pool):
+def get_date_diff(href):
     temp_list = []
     days_passed = []
     href = 'http://www.boxofficemojo.com/'+ href
-    for link in get_soup(href, pool).find_all('a', href=True):
+    for link in get_soup(href).find_all('a', href=True):
         if link['href'].startswith('/schedule/?view=bydate&release=theatrical&date='):
             temp_list.append(to_date(link.text))
     if len(temp_list) > 2:  
@@ -153,18 +158,32 @@ def get_date_diff(href, pool):
     else:
         return None
 
-def get_age(name):
+def get_bday(name):
     if name:
         name.replace(' ','+')
         url = ('http://en.wikipedia.org/w/index.php?search='+name+'&title=Special%3ASearch&go=Go')
-        pool = urllib3.connection_from_url('http://en.wikipedia.org')
-        soup = get_soup(url, pool)
-        for item in soup.find_all(class_="ForceAgeToShow"):
-            return item.text[5:-1]
+        #pool = urllib3.connection_from_url('http://en.wikipedia.org')
+        soup = get_soup(url)
+        for item in soup.find_all(class_="bday"):
+            print(to_date(item.text))
+            return to_date(item.text)
     else:
         return None
 
-
+def get_gender(name):
+    if name:
+        name.replace(' ','+')
+        url = ('http://en.wikipedia.org/w/index.php?search='+name+'&title=Special%3ASearch&go=Go')
+        soup = get_soup(url)
+        obj = soup.find_all(class_="role")
+        if not obj: 
+            return None
+        else:
+            for role in obj:
+                if 'Actor' in role.text:
+                    return '0'
+                elif 'Actress' in role.text:
+                    return '1'
 
 
 
@@ -176,6 +195,20 @@ def money_to_int(moneystring):
     moneystring = moneystring.replace(' (Estimate)', '')
     moneystring = moneystring.replace('$', '').replace(',', '')
     return int(moneystring)
+
+def production_to_int(moneystring):
+    try:
+        if '.' in moneystring:
+            moneystring = moneystring.replace('.','').replace(' million', '00000')
+            moneystring = moneystring.replace('$', '')
+        else:
+            moneystring = moneystring.replace(' million', '000000')
+            moneystring = moneystring.replace('$', '')
+        print(int(moneystring))
+        return int(moneystring)
+
+    except:
+        return None
 
 def runtime_to_minutes(runtimestring):
     runtime = runtimestring.split()
@@ -224,12 +257,12 @@ def getBoxContent(obj):
     else:
         return other.get_text(strip=True)
     
-def getSingleMovieData(url, pool):
+def getSingleMovieData(url,):
     #create a blank dictionary that will be used to track the movie data
     movie_data = {}
     
     #get the raw movie HTML and create a BeautifulSoup object with the text
-    soup = get_soup(url, pool)
+    soup = get_soup(url)
     
     movie_data['url'] = url
     
@@ -254,10 +287,13 @@ def getSingleMovieData(url, pool):
     
     raw_runtime = get_movie_value(soup,'Runtime')
     movie_data['runtime'] = runtime_to_minutes(raw_runtime)
+
+    raw_production = get_movie_value(soup,'Production')
+    movie_data['production'] = production_to_int(raw_production)
     
-    movie_data['actors'] = get_actor_list(soup, pool)
+    movie_data['actors'] = get_actor_list(soup)
     
-    movie_data['directors'] = get_director_list(soup, pool)
+    movie_data['directors'] = get_director_list(soup)
     # movie_data['avg time passed']  =  actordict
     
 
