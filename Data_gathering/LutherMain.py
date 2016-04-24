@@ -86,10 +86,12 @@ def generate_links(soup):
 def getAllMovieData(movie_pages):
     data = []
     count = 0
-    for i in movie_pages[:500]:
+    for i in movie_pages:
         movie_data = getSingleMovieData(i)
         data.append(movie_data)
         count += 1
+        with open('finaldict.pickle', 'wb') as handle:
+            pickle.dump(data, handle)
         print('Movies:' + str(count))
         #print('Requests' + str(pool.num_requests))
     return data    
